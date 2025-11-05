@@ -1,0 +1,153 @@
+package com.todo.service;
+
+import com.todo.dto.TodoRequest;
+import com.todo.dto.TodoResponse;
+import com.todo.entity.Priority;
+import com.todo.entity.Todo;
+import com.todo.entity.User;
+import com.todo.exception.TodoNotFoundException;
+import com.todo.exception.UnauthorizedAccessException;
+import com.todo.exception.UserNotFoundException;
+import com.todo.repository.TodoRepository;
+import com.todo.repository.UserRepository;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.PageRequest;
+import org.springframework.data.domain.Sort;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+
+@Service
+public class TodoServiceImpl implements TodoService {
+
+    private final TodoRepository todoRepository;
+    private final UserRepository userRepository;
+    private static final Logger log = LoggerFactory.getLogger(TodoServiceImpl.class);
+
+    public TodoServiceImpl(TodoRepository todoRepository, UserRepository userRepository) {
+        this.todoRepository = todoRepository;
+        this.userRepository = userRepository;
+    }
+
+    @Override
+    @Transactional
+    public TodoResponse createTodo(String username, TodoRequest request) {
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        Todo todo = Todo.builder()
+                .title(request.getTitle())
+                .description(request.getDescription())
+                .completed(false)
+                .priority(request.getPriority() != null ? request.getPriority() : Priority.MEDIUM)
+                .user(user)
+                .build();
+
+        todo = todoRepository.save(todo);
+
+        return mapToResponse(todo);
+    }
+
+    @Override
+    public Page<TodoResponse> getAllTodos(String username, Boolean completed, Priority priority, Integer page, Integer size) {
+        int pageNumber = (page == null || page < 0) ? 0 : page;
+        int pageSize = (size == null || size <= 0) ? 10 : size;
+        Pageable pageable = PageRequest.of(pageNumber, pageSize, Sort.by("createdAt"));
+
+        User user = userRepository.findByUsername(username)
+                .orElseThrow(() -> new UserNotFoundException("User not found"));
+
+        Page<Todo> result;
+        if (completed != null && priority != null) {
+            result = todoRepository.findByUserIdAndCompletedAndPriority(user.getId(), completed, priority, pageable);
+        } else if (completed != null) {
+            result = todoRepository.findByUserIdAndCompleted(user.getId(), completed, pageable);
+        } else if (priority != null) {
+            result = todoRepository.findByUserIdAndPriority(user.getId(), priority, pageable);
+        } else {
+            result = todoRepository.findByUserId(user.getId(), pageable);
+        }
+        Page<TodoResponse> mapped = result.map(this::mapToResponse);
+        log.debug("Fetched todos page for {}: page={}, size={}, total={}", username, pageNumber, pageSize, mapped.getTotalElements());
+        return mapped;
+    }
+
+    @Override
+    public TodoResponse getTodoById(String username, Long id) {
+        Todo todo = todoRepository.findById(id)
+                .orElseThrow(() -> new TodoNotFoundException("Todo not found"));
+
+        if (!todo.getUser().getUsername().equals(username)) {
+            throw new UnauthorizedAccessException("You are not allowed to access this todo");
+        }
+
+        return mapToResponse(todo);
+    }
+
+    @Override
+    @Transactional
+    public TodoResponse updateTodo(String username, Long id, TodoRequest request) {
+        Todo todo = todoRepository.findById(id)
+                .orElseThrow(() -> new TodoNotFoundException("Todo not found"));
+
+        if (!todo.getUser().getUsername().equals(username)) {
+            throw new UnauthorizedAccessException("You are not allowed to access this todo");
+        }
+
+        todo.setTitle(request.getTitle());
+        if (request.getDescription() != null) {
+            todo.setDescription(request.getDescription());
+        }
+        if (request.getPriority() != null) {
+            todo.setPriority(request.getPriority());
+        }
+
+        todo = todoRepository.save(todo);
+
+        return mapToResponse(todo);
+    }
+
+    @Override
+    @Transactional
+    public TodoResponse toggleTodoComplete(String username, Long id) {
+        Todo todo = todoRepository.findById(id)
+                .orElseThrow(() -> new TodoNotFoundException("Todo not found"));
+
+        if (!todo.getUser().getUsername().equals(username)) {
+            throw new UnauthorizedAccessException("You are not allowed to access this todo");
+        }
+
+        todo.setCompleted(!todo.getCompleted());
+        todo = todoRepository.save(todo);
+
+        return mapToResponse(todo);
+    }
+
+    @Override
+    @Transactional
+    public void deleteTodo(String username, Long id) {
+        Todo todo = todoRepository.findById(id)
+                .orElseThrow(() -> new TodoNotFoundException("Todo not found"));
+
+        if (!todo.getUser().getUsername().equals(username)) {
+            throw new UnauthorizedAccessException("You are not allowed to access this todo");
+        }
+
+        todoRepository.delete(todo);
+    }
+
+    private TodoResponse mapToResponse(Todo todo) {
+        return TodoResponse.builder()
+                .id(todo.getId())
+                .title(todo.getTitle())
+                .description(todo.getDescription())
+                .completed(todo.getCompleted())
+                .priority(todo.getPriority())
+                .createdAt(todo.getCreatedAt())
+                .updatedAt(todo.getUpdatedAt())
+                .userId(todo.getUser().getId())
+                .build();
+    }
+}

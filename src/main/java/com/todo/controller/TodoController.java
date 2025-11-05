@@ -13,8 +13,6 @@ import jakarta.validation.Valid;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.Pageable;
-import org.springframework.data.web.PageableDefault;
 import org.springframework.security.core.Authentication;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.userdetails.UserDetails;
@@ -53,14 +51,13 @@ public class TodoController {
     @GetMapping
     @Operation(summary = "Get all todos", description = "Get all todo items for the authenticated user. Can be filtered by completed status and/or priority.")
     public ResponseEntity<Page<TodoResponse>> getAllTodos(
-            @Parameter(description = "Filter by completion status (true/false)")
-            @RequestParam(required = false) Boolean completed,
-            @Parameter(description = "Filter by priority (LOW, MEDIUM, HIGH)")
-            @RequestParam(required = false) Priority priority,
-            @PageableDefault(size = 10, sort = "createdAt") Pageable pageable,
+            @Parameter(description = "Filter by completion status (true/false)") @RequestParam(required = false) Boolean completed,
+            @Parameter(description = "Filter by priority (LOW, MEDIUM, HIGH)") @RequestParam(required = false) Priority priority,
+            @Parameter(description = "Page number (0-based)") @RequestParam(required = false, defaultValue = "0") Integer page,
+            @Parameter(description = "Page size") @RequestParam(required = false, defaultValue = "10") Integer size,
             Authentication authentication
     ) {
-        Page<TodoResponse> todos = todoService.getAllTodos(getUsername(authentication), completed, priority, pageable);
+        Page<TodoResponse> todos = todoService.getAllTodos(getUsername(authentication), completed, priority, page, size);
         return ResponseEntity.ok(todos);
     }
 

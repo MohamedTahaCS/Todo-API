@@ -12,7 +12,12 @@ import java.time.LocalDateTime;
 @Table(name = "todos", indexes = {
         @Index(name = "idx_todos_user_id", columnList = "user_id"),
         @Index(name = "idx_todos_completed", columnList = "completed"),
-        @Index(name = "idx_todos_priority", columnList = "priority")
+        @Index(name = "idx_todos_priority", columnList = "priority"),
+        // Composite indexes to speed common filtered + sorted queries
+        @Index(name = "idx_todos_user_created_at", columnList = "user_id, created_at"),
+        @Index(name = "idx_todos_user_completed_created_at", columnList = "user_id, completed, created_at"),
+        @Index(name = "idx_todos_user_priority_created_at", columnList = "user_id, priority, created_at"),
+        @Index(name = "idx_todos_user_completed_priority_created_at", columnList = "user_id, completed, priority, created_at")
 })
 @Data
 @NoArgsConstructor
